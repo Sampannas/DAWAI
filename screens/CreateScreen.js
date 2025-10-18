@@ -116,7 +116,7 @@ const PatternBlock = ({ group, stepWidth, trackColor, isPlaying, activeStep }) =
   const blockLeft = startStep * stepWidth + 2;
 
   return (
-    <View style={[ styles.patternBlock, { left: blockLeft, width: blockWidth, backgroundColor: trackColor + '40', borderColor: trackColor } ]}>
+    <View pointerEvents="none" style={[ styles.patternBlock, { left: blockLeft, width: blockWidth, backgroundColor: trackColor + '40', borderColor: trackColor } ]}>
       <View style={styles.patternDots}>
         {group.map((stepIndex) => {
           const dotLeft = (stepIndex - startStep) * stepWidth + stepWidth / 2 - 3;
@@ -264,6 +264,7 @@ export default function CreateScreen() {
 
   const handlePressCell = (trackIndex, stepIndex) => {
     const newGrid = grid.map(row => [...row]);
+    // This single line handles the on/off toggle
     newGrid[trackIndex][stepIndex] = !newGrid[trackIndex][stepIndex];
     setGrid(newGrid);
   };
