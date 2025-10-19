@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, StatusBar, Animated, Dimensions, Platform, Modal, TextInput, FlatList, Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth, db } from '../firebaseConfig';
+import { collection, getDocs, doc, setDoc, deleteDoc } from "firebase/firestore";
+console.log('db instance:', db);
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
@@ -14,7 +16,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const INITIAL_NUM_STEPS = 30;
 const INITIAL_BPM = 120;
 const TRACK_HEIGHT = 50;
-const MAX_STEPS = 50;
+const MAX_STEPS = 300;
 const MIN_STEPS = 8;
 const STORAGE_KEY = '@rhythm_studio_beats';
 
@@ -44,7 +46,7 @@ const CHANNELS = [
       { name: 'Clap', url: 'https://raw.githubusercontent.com/wesbos/JavaScript30/master/01%20-%20JavaScript%20Drum%20Kit/sounds/clap.wav' },
       { name: 'Tom', url: 'https://raw.githubusercontent.com/wesbos/JavaScript30/master/01%20-%20JavaScript%20Drum%20Kit/sounds/tom.wav' },
       { name: 'Ride', url: 'https://raw.githubusercontent.com/wesbos/JavaScript30/master/01%20-%20JavaScript%20Drum%20Kit/sounds/ride.wav' },
-      { name: 'Cowbell', url: 'https://cdn.jsdelivr.net/gh/Tonejs/Tone.js/examples/audio/drum-samples/Cowbell/808.mp3' },
+      { name: 'Cowbell', url: 'https://oramics.github.io/sampled/DM/LM-2/samples/cowb.wav' },
     ]
   },
   {
@@ -460,26 +462,21 @@ const LoadModal = memo(({ visible, onClose, savedBeats, onLoad, onDelete }) => {
   );
 });
 
+
 // --- Storage Functions ---
 const Storage = {
-  async saveBeats(beats) {
-    try {
-      const jsonString = JSON.stringify(beats);
-      console.log(jsonString);
-      // Define the file path
-
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(beats));
-      return true;
-    } catch (error) {
-      console.error('Error saving beats:', error);
-      return false;
-    }
-  },
-  
   async loadBeats() {
     try {
-      const data = await AsyncStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      const userId = auth.currentUser.uid;
+      if (!userId) return [];
+
+      const beatsCollectionRef = collection(db, "users", userId, "beats");
+      const querySnapshot = await getDocs(beatsCollectionRef);
+      const beats = [];
+      querySnapshot.forEach((doc) => {
+        beats.push(doc.data());
+      });
+      return beats;
     } catch (error) {
       console.error('Error loading beats:', error);
       return [];
@@ -488,14 +485,17 @@ const Storage = {
   
   async saveBeat(beatData) {
     try {
-      const beats = await this.loadBeats();
+      const userId = auth.currentUser.uid;
+      if (!userId) return null;
+
+      const beatId = Date.now().toString();
+      const beatDocRef = doc(db, "users", userId, "beats", beatId);
       const newBeat = {
         ...beatData,
-        id: Date.now().toString(),
+        id: beatId,
         timestamp: Date.now()
       };
-      beats.push(newBeat);
-      await this.saveBeats(beats);
+      await setDoc(beatDocRef, newBeat);
       return newBeat;
     } catch (error) {
       console.error('Error saving beat:', error);
@@ -505,9 +505,11 @@ const Storage = {
   
   async deleteBeat(beatId) {
     try {
-      const beats = await this.loadBeats();
-      const filteredBeats = beats.filter(beat => beat.id !== beatId);
-      await this.saveBeats(filteredBeats);
+      const userId = auth.currentUser.uid;
+      if (!userId) return false;
+
+      const beatDocRef = doc(db, "users", userId, "beats", beatId);
+      await deleteDoc(beatDocRef);
       return true;
     } catch (error) {
       console.error('Error deleting beat:', error);
@@ -586,6 +588,29 @@ export default function CreateScreen() {
       }
     }
   }, [route.params]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+        const style = document.createElement('style');
+        style.textContent = `
+            ::-webkit-scrollbar {
+                height: 8px;
+            }
+            ::-webkit-scrollbar-track {
+                background: ${THEME.secondary};
+            }
+            ::-webkit-scrollbar-thumb {
+                background: ${THEME.primary};
+                border-radius: 4px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: ${THEME.accent};
+            }
+        `;
+        document.head.append(style);
+    }
+  }, []);
+
   // Load saved beats on mount
   useEffect(() => {
     loadSavedBeats();
@@ -990,7 +1015,7 @@ export default function CreateScreen() {
           <ScrollView 
     ref={playlistScrollRef} 
     horizontal 
-    showsHorizontalScrollIndicator={false} 
+    showsHorizontalScrollIndicator={true} 
     style={styles.timelineScroll}
     onScroll={handleTimelineScroll}
     scrollEventThrottle={16}
@@ -1005,7 +1030,7 @@ export default function CreateScreen() {
           </ScrollView>
         </View>
 
-        <ScrollView style={styles.playlistScroll} showsVerticalScrollIndicator={true}>
+        <ScrollView style={styles.playlistScroll} showsVerticalScrollIndicator={false}>
           <View style={styles.playlistContent}>
             {CHANNELS.map((channel) => {
               const channelState = channelStates[channel.id];
@@ -1050,7 +1075,7 @@ export default function CreateScreen() {
                           <ScrollView
                               ref={(ref) => (trackScrollRefs.current[index] = ref)}
                               horizontal
-                              showsHorizontalScrollIndicator={false}
+                              showsHorizontalScrollIndicator={true}
                               scrollEnabled={false} // Prevents user from scrolling individual tracks out of sync
                               style={{ flex: 1 }}
                           >

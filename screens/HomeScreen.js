@@ -141,10 +141,8 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>TAMU Collection</Text>
-            <View style={styles.tamuBadge}>
-              <Text style={styles.tamuBadgeText}>AGGIES</Text>
-            </View>
+            <Text style={styles.sectionTitle}>Default Collection</Text>
+           
           </View>
           {DEFAULT_BEATS.map((beat) => (
             <BeatCard key={beat.id} beat={beat} isDefault />

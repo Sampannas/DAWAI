@@ -1,58 +1,49 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StatusBar, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Feather } from '@expo/vector-icons';
+import { createStackNavigator } from '@react-navigation/stack';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebaseConfig';
 
-// Import your screens
-import HomeScreen from './screens/HomeScreen';
-import CreateScreen from './screens/CreateScreen';
-import AIScreen from './screens/AIScreen';
+// Import your screens and navigators
+import LoginScreen from './screens/LoginScreen';
+import MainTabNavigator from './navigators/MainTabNavigator';
 
-const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
 
-// Centralized Theme for the Navigator
 const THEME = {
   background: '#0a0e27',
-  primary: '#00d4ff',
-  textSecondary: 'rgba(255, 255, 255, 0.5)',
-  cardBackground: '#1e2742',
 };
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [initializing, setInitializing] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      if (initializing) {
+        setInitializing(false);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  if (initializing) {
+    return null; // or a loading screen
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: THEME.background }}>
       <StatusBar barStyle="light-content" />
       <NavigationContainer>
-        <Tab.Navigator
-          screenOptions={({ route }) => ({
-            headerShown: false, // Hide the default header
-            tabBarIcon: ({ focused, color, size }) => {
-              let iconName;
-              if (route.name === 'Home') iconName = 'home';
-              else if (route.name === 'Create') iconName = 'plus-square';
-              else if (route.name === 'AI') iconName = 'cpu';
-              return <Feather name={iconName} size={size} color={color} />;
-            },
-            tabBarStyle: {
-              backgroundColor: THEME.cardBackground,
-              borderTopColor: 'rgba(255, 255, 255, 0.1)',
-              paddingBottom: 5,
-              paddingTop: 5,
-              height: 60,
-            },
-            tabBarActiveTintColor: THEME.primary,
-            tabBarInactiveTintColor: THEME.textSecondary,
-            tabBarLabelStyle: {
-              fontSize: 12,
-              fontWeight: '600',
-            },
-          })}
-        >
-          <Tab.Screen name="Home" component={HomeScreen} />
-          <Tab.Screen name="Create" component={CreateScreen} />
-          <Tab.Screen name="AI" component={AIScreen} />
-        </Tab.Navigator>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {user ? (
+            <Stack.Screen name="Main" component={MainTabNavigator} />
+          ) : (
+            <Stack.Screen name="Login" component={LoginScreen} />
+          )}
+        </Stack.Navigator>
       </NavigationContainer>
     </View>
   );
