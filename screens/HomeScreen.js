@@ -7,6 +7,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { DEFAULT_BEATS } from './defaultBeats.js';
 
+import { Storage } from './Storage.js';
+import { auth } from '../firebaseConfig';
+
 const THEME = {
   gradientBackground: ['#0a0e27', '#1a1f3a'],
   primary: '#00d4ff',
@@ -17,8 +20,6 @@ const THEME = {
   tamu: '#500000',
   tamuGold: '#998542',
 };
-
-const STORAGE_KEY = '@rhythm_studio_beats';
 
 const BeatCard = ({ beat, onPlay, onEdit, isDefault = false }) => {
   const navigation = useNavigation();
@@ -71,13 +72,23 @@ export default function HomeScreen() {
   const navigation = useNavigation();
 
   useEffect(() => {
-    loadSavedBeats();
+    const unsubscribe = auth.onAuthStateChanged(user => {
+      if (user) {
+        loadSavedBeats();
+      } else {
+        setSavedBeats([]);
+        setIsLoading(false);
+      }
+    });
+    return unsubscribe;
   }, []);
 
   // Reload beats when screen comes into focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      loadSavedBeats();
+      if (auth.currentUser) {
+        loadSavedBeats();
+      }
     });
     return unsubscribe;
   }, [navigation]);
@@ -85,8 +96,7 @@ export default function HomeScreen() {
   const loadSavedBeats = async () => {
     try {
       setIsLoading(true);
-      const data = await AsyncStorage.getItem(STORAGE_KEY);
-      const beats = data ? JSON.parse(data) : [];
+      const beats = await Storage.loadBeats();
       setSavedBeats(beats);
     } catch (error) {
       console.error('Error loading saved beats:', error);

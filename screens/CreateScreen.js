@@ -463,60 +463,7 @@ const LoadModal = memo(({ visible, onClose, savedBeats, onLoad, onDelete }) => {
 });
 
 
-// --- Storage Functions ---
-const Storage = {
-  async loadBeats() {
-    try {
-      const userId = auth.currentUser.uid;
-      if (!userId) return [];
-
-      const beatsCollectionRef = collection(db, "users", userId, "beats");
-      const querySnapshot = await getDocs(beatsCollectionRef);
-      const beats = [];
-      querySnapshot.forEach((doc) => {
-        beats.push(doc.data());
-      });
-      return beats;
-    } catch (error) {
-      console.error('Error loading beats:', error);
-      return [];
-    }
-  },
-  
-  async saveBeat(beatData) {
-    try {
-      const userId = auth.currentUser.uid;
-      if (!userId) return null;
-
-      const beatId = Date.now().toString();
-      const beatDocRef = doc(db, "users", userId, "beats", beatId);
-      const newBeat = {
-        ...beatData,
-        id: beatId,
-        timestamp: Date.now()
-      };
-      await setDoc(beatDocRef, newBeat);
-      return newBeat;
-    } catch (error) {
-      console.error('Error saving beat:', error);
-      return null;
-    }
-  },
-  
-  async deleteBeat(beatId) {
-    try {
-      const userId = auth.currentUser.uid;
-      if (!userId) return false;
-
-      const beatDocRef = doc(db, "users", userId, "beats", beatId);
-      await deleteDoc(beatDocRef);
-      return true;
-    } catch (error) {
-      console.error('Error deleting beat:', error);
-      return false;
-    }
-  }
-};
+import { Storage } from './Storage.js';
 
 // --- Main Create Screen Component ---
 export default function CreateScreen() {
@@ -572,19 +519,23 @@ export default function CreateScreen() {
     if (route.params?.loadBeat) {
       const beat = route.params.loadBeat;
       
-      // Load the beat data
-      setGrid(beat.grid);
-      setStepMetadata(beat.stepMetadata);
-      setChannelStates(beat.channelStates);
-      setOctaveSettings(beat.octaveSettings);
-      setTempo(beat.tempo);
-      setNumSteps(beat.numSteps);
-      
-      // Auto-play if requested
-      if (route.params?.autoPlay) {
-        setTimeout(() => {
-          setIsPlaying(true);
-        }, 1000); // Give time for sounds to load
+      if (beat && Array.isArray(beat.grid) && beat.grid.length > 0) {
+        // Load the beat data
+        setGrid(beat.grid);
+        setStepMetadata(beat.stepMetadata);
+        setChannelStates(beat.channelStates);
+        setOctaveSettings(beat.octaveSettings);
+        setTempo(beat.tempo);
+        setNumSteps(beat.numSteps);
+        
+        // Auto-play if requested
+        if (route.params?.autoPlay) {
+          setTimeout(() => {
+            setIsPlaying(true);
+          }, 1000); // Give time for sounds to load
+        }
+      } else if (beat) {
+        Alert.alert('Error', 'Failed to load beat. Data might be corrupted.');
       }
     }
   }, [route.params]);
@@ -639,8 +590,16 @@ export default function CreateScreen() {
       tempo,
       numSteps
     };
-    
-    const saved = await Storage.saveBeat(beatData);
+
+    const dataToSave = {
+      name: name,
+      timestamp: Date.now(),
+      tempo: tempo,
+      numSteps: numSteps,
+      beatData: JSON.stringify(beatData)
+    };
+
+    const saved = await Storage.saveBeat(dataToSave);
     if (saved) {
       Alert.alert('Success', 'Beat saved successfully!');
       loadSavedBeats();
@@ -650,14 +609,35 @@ export default function CreateScreen() {
   };
 
   const handleLoadBeat = useCallback((beat) => {
-    setGrid(beat.grid);
-    setStepMetadata(beat.stepMetadata);
-    setChannelStates(beat.channelStates);
-    setOctaveSettings(beat.octaveSettings);
-    setTempo(beat.tempo);
-    setNumSteps(beat.numSteps);
-    setShowLoadModal(false);
-    Alert.alert('Success', `Loaded "${beat.name}"`);
+    let beatToLoad = null;
+
+    if (beat && beat.beatData) {
+      try {
+        beatToLoad = JSON.parse(beat.beatData);
+      } catch (e) {
+        console.error("Failed to parse beat data", e);
+        Alert.alert('Error', 'Failed to load beat. Data might be corrupted.');
+        setShowLoadModal(false);
+        return;
+      }
+    } else if (beat) {
+      // For backwards compatibility
+      beatToLoad = beat;
+    }
+
+    if (beatToLoad && Array.isArray(beatToLoad.grid) && beatToLoad.grid.length > 0) {
+      setGrid(beatToLoad.grid);
+      setStepMetadata(beatToLoad.stepMetadata);
+      setChannelStates(beatToLoad.channelStates);
+      setOctaveSettings(beatToLoad.octaveSettings);
+      setTempo(beatToLoad.tempo);
+      setNumSteps(beatToLoad.numSteps);
+      setShowLoadModal(false);
+      Alert.alert('Success', `Loaded "${beatToLoad.name}"`);
+    } else {
+      setShowLoadModal(false);
+      Alert.alert('Error', 'Failed to load beat. Data might be corrupted.');
+    }
   }, []);
 
   const handleDeleteBeat = useCallback(async (beatId) => {
