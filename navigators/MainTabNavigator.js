@@ -5,7 +5,7 @@ import { Feather } from '@expo/vector-icons';
 // Import your screens
 import HomeScreen from '../screens/HomeScreen';
 import CreateScreen from '../screens/CreateScreen';
-import AIScreen from '../screens/AIScreen';
+import LearnScreen from '../screens/LearnScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -26,7 +26,7 @@ export default function MainTabNavigator() {
           let iconName;
           if (route.name === 'Home') iconName = 'home';
           else if (route.name === 'Create') iconName = 'plus-square';
-          else if (route.name === 'AI') iconName = 'cpu';
+          else if (route.name === 'Learn') iconName = 'book-open';
           return <Feather name={iconName} size={size} color={color} />;
         },
         tabBarStyle: {
@@ -46,7 +46,7 @@ export default function MainTabNavigator() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Create" component={CreateScreen} />
-      <Tab.Screen name="AI" component={AIScreen} />
+      <Tab.Screen name="Learn" component={LearnScreen} />
     </Tab.Navigator>
   );
 }
