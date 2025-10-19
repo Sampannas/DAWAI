@@ -6,14 +6,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import * as Tone from 'tone';
+import { useRoute } from '@react-navigation/native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // --- Configuration ---
-const INITIAL_NUM_STEPS = 16;
+const INITIAL_NUM_STEPS = 30;
 const INITIAL_BPM = 120;
 const TRACK_HEIGHT = 50;
-const MAX_STEPS = 30;
+const MAX_STEPS = 50;
 const MIN_STEPS = 8;
 const STORAGE_KEY = '@rhythm_studio_beats';
 
@@ -463,6 +464,10 @@ const LoadModal = memo(({ visible, onClose, savedBeats, onLoad, onDelete }) => {
 const Storage = {
   async saveBeats(beats) {
     try {
+      const jsonString = JSON.stringify(beats);
+      console.log(jsonString);
+      // Define the file path
+
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(beats));
       return true;
     } catch (error) {
@@ -521,7 +526,9 @@ export default function CreateScreen() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [savedBeats, setSavedBeats] = useState([]);
-  
+  const route = useRoute();
+
+
   // Drag state
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
@@ -556,14 +563,42 @@ export default function CreateScreen() {
   const intervalRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const playlistScrollRef = useRef(null);
+  const trackScrollRefs = useRef({}); // ADD THIS LINE
   const toneStarted = useRef(false);
   const groupIdCounter = useRef(0);
-
+  useEffect(() => {
+    if (route.params?.loadBeat) {
+      const beat = route.params.loadBeat;
+      
+      // Load the beat data
+      setGrid(beat.grid);
+      setStepMetadata(beat.stepMetadata);
+      setChannelStates(beat.channelStates);
+      setOctaveSettings(beat.octaveSettings);
+      setTempo(beat.tempo);
+      setNumSteps(beat.numSteps);
+      
+      // Auto-play if requested
+      if (route.params?.autoPlay) {
+        setTimeout(() => {
+          setIsPlaying(true);
+        }, 1000); // Give time for sounds to load
+      }
+    }
+  }, [route.params]);
   // Load saved beats on mount
   useEffect(() => {
     loadSavedBeats();
   }, []);
-
+  const handleTimelineScroll = useCallback((event) => {
+    const scrollX = event.nativeEvent.contentOffset.x;
+    Object.values(trackScrollRefs.current).forEach(ref => {
+      if (ref) {
+        // Sync each track's scroll position with the header
+        ref.scrollTo({ x: scrollX, animated: false });
+      }
+    });
+  }, []);
   const loadSavedBeats = async () => {
     const beats = await Storage.loadBeats();
     setSavedBeats(beats);
@@ -952,8 +987,14 @@ export default function CreateScreen() {
           <View style={styles.trackListHeader}>
             <Text style={styles.trackListHeaderText}>Tracks</Text>
           </View>
-          <ScrollView ref={playlistScrollRef} horizontal showsHorizontalScrollIndicator={false} style={styles.timelineScroll}>
-            <View style={styles.timelineSteps}>
+          <ScrollView 
+    ref={playlistScrollRef} 
+    horizontal 
+    showsHorizontalScrollIndicator={false} 
+    style={styles.timelineScroll}
+    onScroll={handleTimelineScroll}
+    scrollEventThrottle={16}
+>            <View style={styles.timelineSteps}>
               {Array(numSteps).fill(0).map((_, i) => (
                 <View key={i} style={[styles.timelineStep, { width: stepWidth }]}>
                   <Text style={[styles.timelineStepNumber, activeStep === i && styles.timelineStepNumberActive]}>{i + 1}</Text>
@@ -995,51 +1036,59 @@ export default function CreateScreen() {
                     
                     return (
                       <View key={index} style={styles.playlistTrack}>
-                        <View style={styles.trackLabelContainer}>
-                          <View style={[styles.trackColorBar, { backgroundColor: sample.channelColor }]} />
-                          <Text style={[styles.trackName, isMuted && styles.trackNameMuted]}>
-                            {sample.name}
-                          </Text>
-                          {sample.note && (
-                            <View style={styles.noteIndicator}>
-                              <Text style={styles.noteText}>{sample.note}</Text>
-                            </View>
-                          )}
-                        </View>
-                        <View style={styles.trackPatternArea}>
-                          <View style={styles.gridLines}>
-                            {Array(numSteps).fill(0).map((_, i) => (
-                              <View key={i} style={[styles.gridLine, { left: i * stepWidth, backgroundColor: (i + 1) % 4 === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)' }]} />
-                            ))}
+                          <View style={styles.trackLabelContainer}>
+                              <View style={[styles.trackColorBar, { backgroundColor: sample.channelColor }]} />
+                              <Text style={[styles.trackName, isMuted && styles.trackNameMuted]}>
+                                  {sample.name}
+                              </Text>
+                              {sample.note && (
+                              <View style={styles.noteIndicator}>
+                                  <Text style={styles.noteText}>{sample.note}</Text>
+                              </View>
+                              )}
                           </View>
-                          <View style={styles.stepButtons}>
-                            {grid[index].map((_, stepIndex) => (
-                              <Pressable 
-                                key={stepIndex} 
-                                style={[styles.stepButton, { width: stepWidth - 4, left: stepIndex * stepWidth + 2 }]} 
-                                onPressIn={() => handlePressIn(index, stepIndex)}
-                                onPressOut={handlePressOut}
-                                onMouseEnter={() => isDragging && handlePressMove(index, stepIndex)}
-                              />
-                            ))}
-                          </View>
-                          {groupConsecutiveSteps(grid[index], stepMetadata[index]).map((group, groupIndex) => (
-                            <PatternBlock 
-                              key={groupIndex} 
-                              group={group} 
-                              stepWidth={stepWidth} 
-                              trackColor={sample.channelColor} 
-                              isPlaying={isPlaying} 
-                              activeStep={activeStep}
-                              isSynth={isSynth}
-                            />
-                          ))}
-                          {activeStep >= 0 && !isMuted && (
-                            <View style={[styles.playheadLine, { left: activeStep * stepWidth + stepWidth / 2, backgroundColor: sample.channelColor }]} />
-                          )}
-                        </View>
+                          <ScrollView
+                              ref={(ref) => (trackScrollRefs.current[index] = ref)}
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                              scrollEnabled={false} // Prevents user from scrolling individual tracks out of sync
+                              style={{ flex: 1 }}
+                          >
+                              <View style={[styles.trackPatternArea, { width: numSteps * stepWidth }]}>
+                                  <View style={styles.gridLines}>
+                                  {Array(numSteps).fill(0).map((_, i) => (
+                                      <View key={i} style={[styles.gridLine, { left: i * stepWidth, backgroundColor: (i + 1) % 4 === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)' }]} />
+                                  ))}
+                                  </View>
+                                  <View style={styles.stepButtons}>
+                                  {grid[index].map((_, stepIndex) => (
+                                      <Pressable 
+                                      key={stepIndex} 
+                                      style={[styles.stepButton, { width: stepWidth - 4, left: stepIndex * stepWidth + 2 }]} 
+                                      onPressIn={() => handlePressIn(index, stepIndex)}
+                                      onPressOut={handlePressOut}
+                                      onMouseEnter={() => isDragging && handlePressMove(index, stepIndex)}
+                                      />
+                                  ))}
+                                  </View>
+                                  {groupConsecutiveSteps(grid[index], stepMetadata[index]).map((group, groupIndex) => (
+                                  <PatternBlock 
+                                      key={groupIndex} 
+                                      group={group} 
+                                      stepWidth={stepWidth} 
+                                      trackColor={sample.channelColor} 
+                                      isPlaying={isPlaying} 
+                                      activeStep={activeStep}
+                                      isSynth={isSynth}
+                                  />
+                                  ))}
+                                  {activeStep >= 0 && !isMuted && (
+                                  <View style={[styles.playheadLine, { left: activeStep * stepWidth + stepWidth / 2, backgroundColor: sample.channelColor }]} />
+                                  )}
+                              </View>
+                          </ScrollView>
                       </View>
-                    );
+                  );
                   })}
                 </View>
               );
@@ -1148,8 +1197,7 @@ const styles = StyleSheet.create({
   trackNameMuted: { color: THEME.textSecondary, opacity: 0.4 },
   noteIndicator: { backgroundColor: 'rgba(255, 255, 255, 0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 6 },
   noteText: { color: THEME.textSecondary, fontSize: 9, fontWeight: '700' },
-  trackPatternArea: { flex: 1, position: 'relative' },
-  gridLines: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row' },
+  trackPatternArea: { position: 'relative', height: '100%' },  gridLines: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row' },
   gridLine: { position: 'absolute', top: 0, bottom: 0, width: 1 },
   stepButtons: { position: 'absolute', top: 0, left: 0, bottom: 0, right: 0 },
   stepButton: { position: 'absolute', top: 0, bottom: 0 },
